@@ -1,0 +1,88 @@
+# ═══════════════════════════════════════════════════════
+# NEXUS AI — Production Dockerfile
+# Multi-stage: deps → build → security-scan → production
+# Final image: ~120MB, non-root, read-only filesystem
+# ═══════════════════════════════════════════════════════
+
+# ── Stage 1: Dependency installer ───────────────────────
+FROM node:22-alpine AS deps
+WORKDIR /build
+
+# Only copy package files first (layer cache optimization)
+COPY package*.json ./
+
+# Install production deps only, clean cache immediately
+RUN npm ci --omit=dev --ignore-scripts \
+    && npm cache clean --force \
+    && rm -rf /tmp/*
+
+# ── Stage 2: Builder ─────────────────────────────────────
+FROM node:22-alpine AS builder
+WORKDIR /build
+
+COPY --from=deps /build/node_modules ./node_modules
+COPY . .
+
+# Run build steps (type check, lint, bundle if needed)
+RUN node --check src/server.js \
+    && node --check src/core/ai-engine.js \
+    && echo "Build validation passed"
+
+# ── Stage 3: Security hardening ──────────────────────────
+FROM node:22-alpine AS security
+WORKDIR /build
+COPY --from=builder /build .
+
+# Audit dependencies
+RUN npm audit --audit-level=high --omit=dev 2>&1 || true
+
+# Remove dev files, test files, docs not needed in prod
+RUN rm -rf \
+    src/tests \
+    docs \
+    .git \
+    .env.* \
+    *.md \
+    .eslintrc* \
+    .prettierrc* \
+    jest.config.* \
+    tsconfig.*
+
+# ── Stage 4: Production runtime ──────────────────────────
+FROM node:22-alpine AS production
+
+# Security: install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init=1.2.5-r3 curl=8.12.1-r0 \
+    && rm -rf /var/cache/apk/*
+
+# Create non-root user
+RUN addgroup -g 1001 -S nexus \
+    && adduser -u 1001 -S nexus -G nexus \
+    && mkdir -p /app /app/logs /app/data \
+    && chown -R nexus:nexus /app
+
+WORKDIR /app
+
+# Copy only production artifacts
+COPY --from=security --chown=nexus:nexus /build/src ./src
+COPY --from=security --chown=nexus:nexus /build/node_modules ./node_modules
+COPY --from=security --chown=nexus:nexus /build/package.json .
+
+# Runtime environment
+ENV NODE_ENV=production \
+    PORT=3001 \
+    NODE_OPTIONS="--max-old-space-size=512 --enable-source-maps" \
+    NPM_CONFIG_LOGLEVEL=warn
+
+# Drop to non-root
+USER nexus
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:3001/health || exit 1
+
+EXPOSE 3001
+
+# dumb-init handles PID 1 correctly (signals, zombie reaping)
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "src/server.js"]

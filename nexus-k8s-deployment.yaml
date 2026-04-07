@@ -1,0 +1,445 @@
+# ═══════════════════════════════════════════════════════
+# NEXUS AI — Kubernetes Production Manifests
+# Includes: Deployment, HPA, PDB, NetworkPolicy,
+#           Service, Ingress, ConfigMap, Secrets
+# ═══════════════════════════════════════════════════════
+
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nexus-ai
+  labels:
+    app.kubernetes.io/name: nexus-ai
+    environment: production
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+
+---
+# ConfigMap — non-sensitive configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-config
+  namespace: nexus-ai
+  labels:
+    app: nexus-api
+    component: config
+data:
+  NODE_ENV: "production"
+  PORT: "3001"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  ALLOWED_ORIGIN: "https://app.nexus.ai"
+  RATE_LIMIT_FREE_RPM: "10"
+  RATE_LIMIT_PRO_RPM: "60"
+  RATE_LIMIT_POWER_RPM: "200"
+  CACHE_TTL_DEFAULT: "3600"
+  MAX_CONTEXT_TOKENS: "200000"
+  WORKER_CONCURRENCY: "10"
+  HEALTH_CHECK_INTERVAL: "30"
+
+---
+# Secret — sensitive values (in prod: use Vault or ESO)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nexus-secrets
+  namespace: nexus-ai
+  labels:
+    app: nexus-api
+    component: secrets
+  annotations:
+    secret-rotation: "enabled"
+    rotation-interval: "90d"
+type: Opaque
+stringData:
+  JWT_SECRET: "REPLACE_WITH_SECURE_SECRET_MIN_64_CHARS"
+  ANTHROPIC_API_KEY: "REPLACE_WITH_ANTHROPIC_API_KEY"
+  DATABASE_URL: "postgres://nexus:REPLACE@nexus-postgres-svc:5432/nexus"
+  REDIS_URL: "redis://:REPLACE@nexus-redis-svc:6379"
+  STRIPE_SECRET_KEY: "REPLACE_WITH_STRIPE_KEY"
+  WEBHOOK_SECRET: "REPLACE_WITH_WEBHOOK_SECRET"
+
+---
+# Deployment — API servers
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus-api
+  namespace: nexus-ai
+  labels:
+    app: nexus-api
+    version: "1.0.0"
+    component: api
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/change-cause: "Initial production deployment"
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: nexus-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0          # Zero-downtime deploys
+  template:
+    metadata:
+      labels:
+        app: nexus-api
+        version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3001"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: nexus-api-sa
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+
+      # Spread across nodes and zones
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: nexus-api
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: nexus-api
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: nexus-api
+                topologyKey: kubernetes.io/hostname
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: api
+          image: nexus-ai/api:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3001
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: nexus-config
+            - secretRef:
+                name: nexus-secrets
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 1001
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: logs
+              mountPath: /app/logs
+            - name: data
+              mountPath: /app/data
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            failureThreshold: 30
+            periodSeconds: 5
+
+          lifecycle:
+            preStop:
+              exec:
+                # Graceful shutdown — wait for in-flight requests
+                command: ["/bin/sh", "-c", "sleep 10"]
+
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 100Mi
+        - name: logs
+          emptyDir:
+            sizeLimit: 500Mi
+        - name: data
+          emptyDir:
+            sizeLimit: 1Gi
+
+      imagePullSecrets:
+        - name: nexus-registry-secret
+
+---
+# Horizontal Pod Autoscaler — CPU + Memory + Custom metrics
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nexus-api-hpa
+  namespace: nexus-ai
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nexus-api
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "100"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 4
+          periodSeconds: 60
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 120
+
+---
+# Pod Disruption Budget — ensure minimum availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nexus-api-pdb
+  namespace: nexus-ai
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: nexus-api
+
+---
+# Service — internal load balancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus-api-svc
+  namespace: nexus-ai
+  labels:
+    app: nexus-api
+  annotations:
+    prometheus.io/scrape: "true"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  selector:
+    app: nexus-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3001
+      protocol: TCP
+
+---
+# Ingress — HTTPS with TLS termination
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nexus-api-ingress
+  namespace: nexus-ai
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://app.nexus.ai"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization,Content-Type,X-Session-Id"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Permissions-Policy: camera=(), microphone=(), geolocation=()";
+spec:
+  tls:
+    - hosts:
+        - api.nexus.ai
+      secretName: nexus-api-tls
+  rules:
+    - host: api.nexus.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nexus-api-svc
+                port:
+                  number: 80
+
+---
+# NetworkPolicy — zero-trust, explicit allow only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nexus-api-netpol
+  namespace: nexus-ai
+spec:
+  podSelector:
+    matchLabels:
+      app: nexus-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from nginx ingress
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3001
+    # Allow from prometheus
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 3001
+  egress:
+    # Allow DNS
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow postgres
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nexus-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Allow redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nexus-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow HTTPS egress (Anthropic API, Stripe, etc.)
+    - ports:
+        - protocol: TCP
+          port: 443
+
+---
+# ServiceAccount — least privilege
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nexus-api-sa
+  namespace: nexus-ai
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT:role/nexus-api-role"
+
+---
+# VerticalPodAutoscaler — right-size resources automatically
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: nexus-api-vpa
+  namespace: nexus-ai
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nexus-api
+  updatePolicy:
+    updateMode: "Off"    # Recommend only, don't auto-apply
+  resourcePolicy:
+    containerPolicies:
+      - containerName: api
+        minAllowed:
+          cpu: 50m
+          memory: 64Mi
+        maxAllowed:
+          cpu: 2000m
+          memory: 1Gi
