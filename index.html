@@ -85,8 +85,7 @@ nav{
 }
 @keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(1.35)}}
 .nav-links{display:flex;align-items:center;gap:2rem}
-.nav-links a{transition:color .2s;
-.nav-links a.active{
+.nav-links a{
   font-size:.8125rem;color:var(--dim);letter-spacing:.06em;
   text-transform:uppercase;transition:color .2s;
 }
@@ -987,7 +986,7 @@ footer{
 @media(max-width:420px){.cw-panel{width:calc(100vw - 2rem);right:1rem}}
 
 /* ── EXIT INTENT ── */
-.exit-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(12px);z-index:9990;display:none;align-items:center;justify-content:center;padding:1.5rem}
+.exit-ov{position:fixed;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(12px);z-index:9990;display:none;align-items:center;justify-content:center;padding:1.5rem}
 .exit-ov.show{display:flex}
 .exit-box{background:var(--mid);border:1px solid rgba(232,68,26,.35);border-radius:8px;padding:2.5rem 2rem;max-width:460px;width:100%;text-align:center;animation:modal-in .4s var(--ease-spring);position:relative}
 .exit-emoji{font-size:2.5rem;margin-bottom:1rem}
@@ -1021,7 +1020,6 @@ footer{
 .stripe-features li{padding:.3rem 0;display:flex;align-items:center;gap:.5rem}
 .stripe-features li::before{content:'✓';color:#4ade80;font-weight:700;flex-shrink:0}
 
-.nav-links a.active{color:var(--accent) !important}
 </style>
 
 <link rel="canonical" href="https://nexusprime-six.vercel.app/">
@@ -1032,58 +1030,10 @@ footer{
 <meta name="theme-color" content="#e8441a">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"NEXUS AI","applicationCategory":"BusinessApplication","operatingSystem":"Web","description":"The unified AI ecosystem — Agent, Assistant, Automation Hub, and Personal OS — all in one platform. Replace ChatGPT, Zapier, and 12 other tools.","url":"https://nexusprime-six.vercel.app","offers":[{"@type":"Offer","name":"Free","price":"0","priceCurrency":"USD"},{"@type":"Offer","name":"Pro","price":"19","priceCurrency":"USD"},{"@type":"Offer","name":"Power","price":"49","priceCurrency":"USD"},{"@type":"Offer","name":"Enterprise","price":"500","priceCurrency":"USD"}],"aggregateRating":{"@type":"AggregateRating","ratingValue":"4.9","reviewCount":"1284","bestRating":"5","worstRating":"1"},"author":{"@type":"Organization","name":"NEXUS AI","url":"https://nexusprime-six.vercel.app"},"featureList":["AI Agent Mode","Persistent Memory","Workflow Automation","50+ Integrations","Claude-powered","Multi-language"]}
-
-/* Nav active section tracking */
-(function initNavScroll(){
-  var sections = document.querySelectorAll('section[id]');
-  var navLinks = document.querySelectorAll('.nav-links a[href^="#"]');
-  if(!sections.length || !navLinks.length) return;
-  var tick = false;
-  window.addEventListener('scroll', function(){
-    if(tick) return;
-    tick = true;
-    requestAnimationFrame(function(){
-      var scrollY = window.scrollY + 100;
-      var current = '';
-      sections.forEach(function(s){
-        if(s.offsetTop <= scrollY) current = s.id;
-      });
-      navLinks.forEach(function(a){
-        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
-      });
-      tick = false;
-    });
-  }, {passive:true});
-})(); /* navScrollTrack */
-
 </script>
 
 <!-- Analytics -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-NEXUSAI2026">
-/* Nav active section tracking */
-(function initNavScroll(){
-  var sections = document.querySelectorAll('section[id]');
-  var navLinks = document.querySelectorAll('.nav-links a[href^="#"]');
-  if(!sections.length || !navLinks.length) return;
-  var tick = false;
-  window.addEventListener('scroll', function(){
-    if(tick) return;
-    tick = true;
-    requestAnimationFrame(function(){
-      var scrollY = window.scrollY + 100;
-      var current = '';
-      sections.forEach(function(s){
-        if(s.offsetTop <= scrollY) current = s.id;
-      });
-      navLinks.forEach(function(a){
-        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
-      });
-      tick = false;
-    });
-  }, {passive:true});
-})(); /* navScrollTrack */
-
-</script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NEXUSAI2026"></script>
 <script>
 window.dataLayer=window.dataLayer||[];
 function gtag(){dataLayer.push(arguments);}
@@ -1093,56 +1043,8 @@ function trackEvent(action,cat,label,val){
   if(typeof gtag!=='undefined') gtag('event',action,{event_category:cat,event_label:label,value:val||0});
   if(typeof plausible!=='undefined') plausible(action,{props:{category:cat,label:String(label||'')}});
 }
-
-/* Nav active section tracking */
-(function initNavScroll(){
-  var sections = document.querySelectorAll('section[id]');
-  var navLinks = document.querySelectorAll('.nav-links a[href^="#"]');
-  if(!sections.length || !navLinks.length) return;
-  var tick = false;
-  window.addEventListener('scroll', function(){
-    if(tick) return;
-    tick = true;
-    requestAnimationFrame(function(){
-      var scrollY = window.scrollY + 100;
-      var current = '';
-      sections.forEach(function(s){
-        if(s.offsetTop <= scrollY) current = s.id;
-      });
-      navLinks.forEach(function(a){
-        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
-      });
-      tick = false;
-    });
-  }, {passive:true});
-})(); /* navScrollTrack */
-
 </script>
-<script defer data-domain="nexusprime-six.vercel.app" src="https://plausible.io/js/script.js">
-/* Nav active section tracking */
-(function initNavScroll(){
-  var sections = document.querySelectorAll('section[id]');
-  var navLinks = document.querySelectorAll('.nav-links a[href^="#"]');
-  if(!sections.length || !navLinks.length) return;
-  var tick = false;
-  window.addEventListener('scroll', function(){
-    if(tick) return;
-    tick = true;
-    requestAnimationFrame(function(){
-      var scrollY = window.scrollY + 100;
-      var current = '';
-      sections.forEach(function(s){
-        if(s.offsetTop <= scrollY) current = s.id;
-      });
-      navLinks.forEach(function(a){
-        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
-      });
-      tick = false;
-    });
-  }, {passive:true});
-})(); /* navScrollTrack */
-
-</script>
+<script defer data-domain="nexusprime-six.vercel.app" src="https://plausible.io/js/script.js"></script>
 </head>
 <body>
 
@@ -1320,7 +1222,7 @@ function trackEvent(action,cat,label,val){
     <button class="mobile-lang-btn" onclick="setLanguage('ja');syncMobLang(this)">&#x1F1EF;&#x1F1F5; JA</button>
   </div>
 </div>
-<section class="hero" id="hero">
+<section class="hero">
   <div class="hero-grid"></div>
   <div class="hero-eyebrow" data-i18n="hero.eyebrow">Launching now · 1,284 early users</div>
   <h1 class="hero-headline">
@@ -1784,31 +1686,7 @@ function trackEvent(action,cat,label,val){
   <span class="ticker-text"><span class="ticker-num" id="ticker-num">1,284</span> <span data-i18n="ticker">builders live</span></span>
 </div>
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js">
-/* Nav active section tracking */
-(function initNavScroll(){
-  var sections = document.querySelectorAll('section[id]');
-  var navLinks = document.querySelectorAll('.nav-links a[href^="#"]');
-  if(!sections.length || !navLinks.length) return;
-  var tick = false;
-  window.addEventListener('scroll', function(){
-    if(tick) return;
-    tick = true;
-    requestAnimationFrame(function(){
-      var scrollY = window.scrollY + 100;
-      var current = '';
-      sections.forEach(function(s){
-        if(s.offsetTop <= scrollY) current = s.id;
-      });
-      navLinks.forEach(function(a){
-        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
-      });
-      tick = false;
-    });
-  }, {passive:true});
-})(); /* navScrollTrack */
-
-</script><script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 /* ════════════════════════════════════════
    i18n ENGINE
 ════════════════════════════════════════ */
@@ -2337,7 +2215,6 @@ const AGENT_STEPS = [
 ];
 
 let agentRunning = false;
-var runAgentInit = null; // alias assigned below
 function runAgent() {
   if (agentRunning) return;
   const inp = document.getElementById('agent-in');
@@ -2377,8 +2254,6 @@ function runAgent() {
     delay += s.dur + 100;
   });
 }
-runAgentInit = runAgent; // alias for switchDemo compatibility
-
 
 /* ════════════════════════════════════════
    DEMO — AUTOMATION BUILDER
@@ -2923,7 +2798,6 @@ function cycleMode(){
   if(b) b.textContent=dModes[dModeIdx]+' ▾';
   showToast('Mode: '+dModes[dModeIdx],'info');
 }
-var dBusy = false; var dModeIdx = 0; var dModes = ['ASSISTANT','AGENT','HUB','OS'];
 function sendDChat() {
   var inp  = document.getElementById('d-chat-in');
   var msgs = document.getElementById('d-msgs');
@@ -3128,7 +3002,14 @@ document.addEventListener('keydown', function(e) {
 ════════════════════════════════════════════════════════ */
 
 /* ── trackEvent (GA4 + Plausible) ── */
-
+if(typeof trackEvent === 'undefined') {
+  function trackEvent(action, cat, label, val) {
+    try {
+      if(typeof gtag !== 'undefined') gtag('event', action, {event_category: cat||'', event_label: String(label||''), value: val||0});
+      if(typeof plausible !== 'undefined') plausible(action, {props: {category: cat, label: String(label||'')}});
+    } catch(e) {}
+  }
+}
 
 /* ── ANNOUNCEMENT BAR ── */
 function trackAnnouncebar() {
@@ -3364,54 +3245,6 @@ document.addEventListener('keydown', function(e){
     if(typeof hideDash==='function') hideDash();
   }
 });
-
-
-/* Nav active section tracking */
-(function initNavScroll(){
-  var sections = document.querySelectorAll('section[id]');
-  var navLinks = document.querySelectorAll('.nav-links a[href^="#"]');
-  if(!sections.length || !navLinks.length) return;
-  var tick = false;
-  window.addEventListener('scroll', function(){
-    if(tick) return;
-    tick = true;
-    requestAnimationFrame(function(){
-      var scrollY = window.scrollY + 100;
-      var current = '';
-      sections.forEach(function(s){
-        if(s.offsetTop <= scrollY) current = s.id;
-      });
-      navLinks.forEach(function(a){
-        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
-      });
-      tick = false;
-    });
-  }, {passive:true});
-})(); /* navScrollTrack */
-
-
-/* Nav active section tracking */
-(function initNavScroll(){
-  var sections = document.querySelectorAll('section[id]');
-  var navLinks = document.querySelectorAll('.nav-links a[href^="#"]');
-  if(!sections.length || !navLinks.length) return;
-  var tick = false;
-  window.addEventListener('scroll', function(){
-    if(tick) return;
-    tick = true;
-    requestAnimationFrame(function(){
-      var scrollY = window.scrollY + 100;
-      var current = '';
-      sections.forEach(function(s){
-        if(s.offsetTop <= scrollY) current = s.id;
-      });
-      navLinks.forEach(function(a){
-        a.classList.toggle('active', a.getAttribute('href') === '#' + current);
-      });
-      tick = false;
-    });
-  }, {passive:true});
-})(); /* navScrollTrack */
 
 </script>
 
